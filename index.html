@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Štikačka – výkaz hodín na zákazky</title>
+<meta name="description" content="Štikačka – osobný výkaz hodín na zákazky pre projektanta. Časovač, ručný zápis, týždenný výkaz. Údaje zostávajú v prehliadači.">
+<meta name="theme-color" content="#FAFBFA" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222A33" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/svg+xml" id="favicon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Cdefs%3E%3Cmask id=%22lgHole%22%3E%3Crect width=%2264%22 height=%2264%22 fill=%22%23fff%22/%3E%3Ccircle cx=%2232%22 cy=%2251%22 r=%223.6%22 fill=%22%23000%22/%3E%3C/mask%3E%3C/defs%3E%3Cg transform=%22rotate%28-8 32 32%29%22 mask=%22url%28%23lgHole%29%22%3E%3Crect x=%229%22 y=%227%22 width=%2246%22 height=%2250%22 rx=%227%22 fill=%22%23F2E8CB%22 stroke=%22%2318202B%22 stroke-width=%223%22/%3E%3Cpath d=%22M10.5 17V13a5.5 5.5 0 0 1 5.5-5.5h32a5.5 5.5 0 0 1 5.5 5.5v4z%22 fill=%22%231F4FBF%22/%3E%3Cpath d=%22M15 31.5h34M15 43h34%22 stroke=%22%23B9A877%22 stroke-width=%222%22 stroke-linecap=%22round%22/%3E%3Cpath d=%22M15 25h9M15 37h9%22 stroke=%22%238C7F5A%22 stroke-width=%222.4%22 stroke-linecap=%22round%22/%3E%3Crect x=%2230%22 y=%2220.5%22 width=%2219%22 height=%228.5%22 rx=%222.5%22 fill=%22%23C62828%22 transform=%22rotate%28-4 39.5 24.5%29%22/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="top">
+  <div class="wrap">
+    <div class="bar">
+      <div class="brand"><span class="brand-name"><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><mask id="lgHoleH"><rect width="64" height="64" fill="#fff"/><circle cx="32" cy="51" r="3.6" fill="#000"/></mask></defs><g transform="rotate(-8 32 32)" mask="url(#lgHoleH)"><rect x="9" y="7" width="46" height="50" rx="7" fill="#F2E8CB" stroke="#18202B" stroke-width="3"/><path d="M10.5 17V13a5.5 5.5 0 0 1 5.5-5.5h32a5.5 5.5 0 0 1 5.5 5.5v4z" fill="#1F4FBF"/><path d="M15 31.5h34M15 43h34" stroke="#B9A877" stroke-width="2" stroke-linecap="round"/><path d="M15 25h9M15 37h9" stroke="#8C7F5A" stroke-width="2.4" stroke-linecap="round"/><rect class="lg-stamp" x="30" y="20.5" width="19" height="8.5" rx="2.5" fill="#C62828" transform="rotate(-4 39.5 24.5)"/></g></svg><span class="wordmark">Štikačka</span></span> <span class="sync" id="sync"></span></div>
+      <button class="btn warn" id="btnNudge" hidden title="Posledná záloha je staršia ako 7 dní"><span class="hide-s">Stiahnuť zálohu</span><span class="show-s">Záloha</span></button>
+      <button class="btn" id="btnAdd">+ <span class="hide-s">Pridať </span>záznam</button>
+      <button class="btn ghost" id="btnSettings" aria-label="Nastavenia a dáta"><span class="hide-s">Nastavenia</span><svg class="show-s" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+    </div>
+    <div class="timer" id="timer">
+      <div class="clockbox">
+        <div class="punch" id="punch" aria-hidden="true" hidden>
+          <div class="pslot"><i></i></div>
+          <div class="pclip"><div class="pcard">
+            <div class="prow r1"><span>Príchod</span><b class="pstamp ps-in"></b></div>
+            <div class="prow r2"><span>Odchod</span><b class="pstamp ps-out"></b></div>
+            <div class="pc-label"></div>
+            <div class="pc-foot"><span class="pc-date"></span><b class="pc-sum"></b></div>
+          </div></div>
+        </div>
+        <div class="clock num" id="clock">0:00:00</div>
+        <div class="clock-sub" id="clockSub">Časovač stojí</div>
+      </div>
+      <div class="tfields">
+        <label class="field"><span>Zákazka</span><select id="tProject"></select></label>
+        <label class="field"><span>Činnosť</span><input id="tActivity" placeholder="napr. Výkresy" autocomplete="off"></label>
+        <label class="field"><span>Objekt (SO/PS)</span><input id="tSO" autocomplete="off"></label>
+        <label class="field"><span>Popis</span><input id="tNote" placeholder="Čo práve robíte" autocomplete="off"></label>
+      </div>
+      <button class="btn primary startbtn" id="tStart">Spustiť</button>
+    </div>
+  </div>
+  <div class="wrap"><nav class="tabs" role="tablist" id="tabs">
+    <button class="tab" role="tab" data-tab="prehlad" aria-selected="true">Prehľad</button>
+    <button class="tab" role="tab" data-tab="zaznamy" aria-selected="false">Záznamy</button>
+    <button class="tab" role="tab" data-tab="vykaz" aria-selected="false">Týždenný výkaz</button>
+    <button class="tab" role="tab" data-tab="zakazky" aria-selected="false">Zákazky</button>
+  </nav></div>
+</div>
+
+<main class="wrap" id="main"></main>
+
+<footer class="foot wrap"><a href="https://github.com/tomecjak" target="_blank" rel="noopener">VibeCode by Jakub</a></footer>
+
+
+<!-- Entry dialog -->
+<dialog id="dEntry">
+  <form class="dlg" method="dialog" id="fEntry">
+    <h2 id="dEntryTitle">Nový záznam</h2>
+    <div class="fgrid">
+      <label class="field c6"><span>Zákazka</span><select name="projectId" id="eProject"></select></label>
+      <label class="field c2"><span>Dátum</span><input type="date" name="date" required></label>
+      <label class="field c2"><span>Od</span><input type="time" name="start"></label>
+      <label class="field c2"><span>Do</span><input type="time" name="end"></label>
+      <label class="field c2"><span>Trvanie (h)</span><input name="duration" placeholder="1,5 alebo 1:30" inputmode="decimal" autocomplete="off"></label>
+      <div class="field c4" style="justify-content:flex-end"><span class="hint">Vyplňte čas od–do, alebo len trvanie. Pri vyplnenom od–do sa trvanie dopočíta.</span></div>
+      <label class="field c3"><span>Činnosť</span><input name="activity" autocomplete="off"></label>
+      <label class="field c3"><span>Objekt (SO/PS)</span><input name="so" autocomplete="off"></label>
+      <label class="field c6"><span>Popis</span><textarea name="note" rows="2"></textarea></label>
+    </div>
+    <div class="dfoot">
+      <button type="button" class="btn ghost danger left" id="eDelete">Vymazať</button>
+      <button type="button" class="btn" data-close>Zrušiť</button>
+      <button type="submit" class="btn primary" value="save">Uložiť záznam</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Project dialog -->
+<dialog id="dProject">
+  <form class="dlg" method="dialog" id="fProject">
+    <h2 id="dProjectTitle">Nová zákazka</h2>
+    <div class="fgrid">
+      <label class="field c2"><span>Číslo zákazky</span><input name="number" placeholder="2026-041" autocomplete="off"></label>
+      <label class="field c4"><span>Názov</span><input name="name" required placeholder="Cesta I/18 – obchvat" autocomplete="off"></label>
+      <label class="field c4"><span>Investor / objednávateľ</span><input name="client" autocomplete="off"></label>
+      <label class="field c2"><span>Stupeň PD</span><select name="stage"></select></label>
+      <label class="field c6"><span>Objekty (SO/PS) – oddeľte čiarkou</span><input name="objects" placeholder="SO 101, SO 201 Most, PS 01" autocomplete="off"></label>
+      <div class="field c6"><span>Farba hladiny</span><div class="swatches" id="swatches" role="radiogroup" aria-label="Farba hladiny"></div></div>
+      <label class="field c6"><span>Poznámka</span><textarea name="pnote" rows="2"></textarea></label>
+    </div>
+    <div class="dfoot">
+      <button type="button" class="btn ghost danger left" id="pDelete">Vymazať zákazku</button>
+      <button type="button" class="btn" data-close>Zrušiť</button>
+      <button type="submit" class="btn primary" value="save">Uložiť zákazku</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Settings dialog -->
+<dialog id="dSettings">
+  <form class="dlg" method="dialog" id="fSettings">
+    <h2>Nastavenia</h2>
+    <div class="fgrid">
+      <div class="field c6"><span>Zaokrúhľovanie časovača (nahor)</span>
+        <div class="seg" id="segRound">
+          <button type="button" data-v="1">1 min</button><button type="button" data-v="5">5 min</button><button type="button" data-v="15">15 min</button><button type="button" data-v="30">30 min</button>
+        </div>
+      </div>
+      <label class="field c3"><span>Denný fond (h)</span><input name="dayTarget" inputmode="decimal"></label>
+      <label class="field c3"><span>Týždenný fond (h)</span><input name="weekTarget" inputmode="decimal"></label>
+      <label class="field c6"><span>Vlastné činnosti – oddeľte čiarkou (doplnia sa k predvoleným)</span><input name="customActs" autocomplete="off"></label>
+      <label class="check c6"><input type="checkbox" name="punchAnim"> Animácia štiknutia pri spustení a zastavení časovača</label>
+    </div>
+    <h3 style="margin:22px 0 4px">Úložisko a záloha</h3>
+    <p class="hint" id="storageInfo" style="margin:0 0 10px"></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="btn" id="btnBackup">Stiahnuť zálohu (JSON)</button>
+      <button type="button" class="btn" id="btnRestore">Obnoviť zo zálohy</button>
+      <button type="button" class="btn ghost" id="btnPersist" hidden>Požiadať o trvalé uloženie</button>
+      <input type="file" id="fileRestore" accept=".json,application/json" hidden>
+    </div>
+    <div class="dfoot">
+      <button type="button" class="btn" data-close>Zrušiť</button>
+      <button type="submit" class="btn primary" value="save">Uložiť nastavenia</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Confirm dialog -->
+<dialog id="dConfirm" class="confirm" aria-labelledby="cTitle">
+  <div class="dlg">
+    <h2 id="cTitle"></h2>
+    <p id="cMsg" style="margin:0"></p>
+    <div class="dfoot"><button type="button" class="btn" id="cNo">Zrušiť</button><button type="button" class="btn primary" id="cYes">Vymazať</button></div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
