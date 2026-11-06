@@ -30,8 +30,7 @@ const weekStart = d => { const x = new Date(d.getFullYear(), d.getMonth(), d.get
 const hm = d => pad(d.getHours()) + ":" + pad(d.getMinutes());
 const toMin = t => { if (!t) return null; const [h, m] = t.split(":").map(Number); return h * 60 + m; };
 const fromMin = m => pad(Math.floor(m / 60) % 24) + ":" + pad(m % 60);
-const hrs = min => { const v = Math.round(min / 60 * 100) / 100; return v.toLocaleString("sk-SK", { minimumFractionDigits: 0, maximumFractionDigits: 2 }); };
-const hrs1 = min => (Math.round(min / 60 * 10) / 10).toLocaleString("sk-SK", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const hmm = min => { const m = Math.round(min || 0); return Math.floor(m / 60) + ":" + pad(m % 60); }; // duration as h:mm
 const parseNum = s => { const v = parseFloat(String(s).replace(",", ".").replace(/\s/g, "")); return isFinite(v) ? v : null; };
 function parseDuration(s) {
   s = String(s || "").trim().toLowerCase();
@@ -254,7 +253,7 @@ function stopTimer() {
     minutes, activity: t.activity, so: t.so, note: t.note, source: "timer"
   };
   saveEntry(entry);
-  if (!punch("out", Object.assign(card, { sum: hrs(minutes) + " h" }))) toast("Uložené: " + hrs(minutes) + " h na " + projLabel(p));
+  if (!punch("out", Object.assign(card, { sum: hmm(minutes) + " h" }))) toast("Uložené: " + hmm(minutes) + " h na " + projLabel(p));
 }
 /* ---------- Štiknutie: punch-card animation ---------- */
 let punchChain = Promise.resolve();
@@ -409,7 +408,7 @@ function projectRow(p) {
   return `<tr>
     <td><button class="linkish" data-act="filterProject" data-id="${esc(p.id)}" style="display:flex;align-items:center"><span class="layer" style="--c:${layerColor(p)}"></span><span><span class="pnum">${esc(p.number || "")}</span> <span class="pname">${esc(p.name)}</span>${p.client ? `<br><span class="muted" style="font-size:13px">${esc(p.client)}</span>` : ""}</span></button></td>
     <td>${p.stage ? `<span class="stage">${esc(p.stage)}</span>` : ""}</td>
-    <td class="r"><b class="num">${hrs(spent)}</b> <span class="muted">h</span></td>
+    <td class="r"><b class="num">${hmm(spent)}</b> <span class="muted">h</span></td>
     <td class="muted num">${last ? shortDate(parseD(last)) + " " + parseD(last).getFullYear() : "–"}</td>
     <td class="rowacts"><button class="btn small ghost" data-act="startProject" data-id="${esc(p.id)}" title="Spustiť časovač">▶ Spustiť</button><button class="btn small ghost" data-act="editProject" data-id="${esc(p.id)}">Upraviť</button></td>
   </tr>`;
@@ -423,7 +422,7 @@ function entryRow(e) {
   const when = e.start ? `${e.start}–${e.end || ""}` : (e.source === "manual" ? "ručne" : "");
   return `<div class="entry">
     <div class="when num">${esc(when)}</div>
-    <div class="dur num">${hrs(e.minutes)}</div>
+    <div class="dur num">${hmm(e.minutes)}</div>
     <div class="what">
       <div class="l1"><span class="layer" style="--c:${layerColor(p)}"></span><span class="pnum">${esc(p ? p.number || "" : "")}</span><span class="pname">${esc(p ? p.name : NO_PROJ)}</span>${e.activity ? `<span class="tag">${esc(e.activity)}</span>` : ""}${e.so ? `<span class="tag">${esc(e.so)}</span>` : ""}</div>
       ${e.note ? `<div class="l2">${esc(e.note)}</div>` : ""}
@@ -434,7 +433,7 @@ function entryRow(e) {
 function entriesByDay(list) {
   const groups = {};
   list.forEach(e => (groups[e.date] = groups[e.date] || []).push(e));
-  return Object.keys(groups).sort().reverse().map(d => `<div class="day"><div class="dayhead"><h3>${longDate(d)}${d === todayStr() ? " · dnes" : ""}</h3><span class="num">${hrs(sumMin(groups[d]))} h</span></div>${groups[d].map(entryRow).join("")}</div>`).join("");
+  return Object.keys(groups).sort().reverse().map(d => `<div class="day"><div class="dayhead"><h3>${longDate(d)}${d === todayStr() ? " · dnes" : ""}</h3><span class="num">${hmm(sumMin(groups[d]))} h</span></div>${groups[d].map(entryRow).join("")}</div>`).join("");
 }
 
 // Time of the running timer so far, split per calendar day (it may run over midnight).
@@ -466,10 +465,10 @@ function totalsBlock() {
   const weekIds = [...new Set(weekEntries.map(e => e.projectId || ""))].sort((a, b) => projLabel(proj(a)).localeCompare(projLabel(proj(b)), "sk"));
   const segs = d => weekIds.map(id => ({ id, m: sumMin(weekEntries.filter(e => e.date === d && (e.projectId || "") === id)) })).filter(x => x.m);
   return `<div class="tblock">
-      <div><div class="tb-l">Dnes</div><div class="tb-v">${hrs1(tMin)} <small>/ ${hrs(dayT)} h</small></div><div class="meter"><i style="width:${Math.min(100, tMin / dayT * 100)}%"></i></div></div>
-      <div><div class="tb-l">Tento týždeň</div><div class="tb-v">${hrs1(wMin)} <small>/ ${hrs(weekT)} h</small></div><div class="meter"><i style="width:${Math.min(100, wMin / weekT * 100)}%"></i></div></div>
-      <div><div class="tb-l">${MONTHS[new Date().getMonth()][0].toUpperCase() + MONTHS[new Date().getMonth()].slice(1)}</div><div class="tb-v">${hrs1(mMin)} <small>h</small></div></div>
-      <div><div class="tb-l">Týždeň po dňoch</div><div class="weekbars">${weekDates.map((d, i) => `<div class="wb${d === today ? " today" : ""}"><div class="stack">${segs(d).map(s => `<i style="--c:${layerColor(proj(s.id))};height:${s.m / maxD * 100}%" title="${DAYS[i]} – ${esc(projLabel(proj(s.id)))}: ${hrs(s.m)} h"></i>`).join("")}</div><span>${DAYS[i]}</span></div>`).join("")}</div>${weekIds.length ? `<div class="wlegend">${weekIds.map(id => { const p = proj(id); return `<span><span class="layer" style="--c:${layerColor(p)}"></span>${esc(p ? (p.number || p.name) : NO_PROJ)}</span>`; }).join("")}</div>` : ""}</div>
+      <div><div class="tb-l">Dnes</div><div class="tb-v">${hmm(tMin)} <small>/ ${hmm(dayT)} h</small></div><div class="meter"><i style="width:${Math.min(100, tMin / dayT * 100)}%"></i></div></div>
+      <div><div class="tb-l">Tento týždeň</div><div class="tb-v">${hmm(wMin)} <small>/ ${hmm(weekT)} h</small></div><div class="meter"><i style="width:${Math.min(100, wMin / weekT * 100)}%"></i></div></div>
+      <div><div class="tb-l">${MONTHS[new Date().getMonth()][0].toUpperCase() + MONTHS[new Date().getMonth()].slice(1)}</div><div class="tb-v">${hmm(mMin)} <small>h</small></div></div>
+      <div><div class="tb-l">Týždeň po dňoch</div><div class="weekbars">${weekDates.map((d, i) => `<div class="wb${d === today ? " today" : ""}"><div class="stack">${segs(d).map(s => `<i style="--c:${layerColor(proj(s.id))};height:${s.m / maxD * 100}%" title="${DAYS[i]} – ${esc(projLabel(proj(s.id)))}: ${hmm(s.m)} h"></i>`).join("")}</div><span>${DAYS[i]}</span></div>`).join("")}</div>${weekIds.length ? `<div class="wlegend">${weekIds.map(id => { const p = proj(id); return `<span><span class="layer" style="--c:${layerColor(p)}"></span>${esc(p ? (p.number || p.name) : NO_PROJ)}</span>`; }).join("")}</div>` : ""}</div>
     </div>`;
 }
 // Refresh only the totals while the timer runs, so the rest of the page is left alone.
@@ -522,7 +521,7 @@ function viewEntries() {
       ${projectItems(S.filter.project)}
     </select></label>
   </div>
-  <p class="sumline">Spolu <b class="num">${hrs(total)} h</b> v ${list.length} ${list.length === 1 ? "zázname" : "záznamoch"}</p>
+  <p class="sumline">Spolu <b class="num">${hmm(total)} h</b> v ${list.length} ${list.length === 1 ? "zázname" : "záznamoch"}</p>
   ${list.length ? entriesByDay(list) : `<div class="empty"><p>V tomto období nie sú žiadne záznamy.</p><button class="btn" data-act="newEntry">+ Pridať záznam</button></div>`}`;
 }
 
@@ -547,10 +546,10 @@ function viewWeek() {
     <button class="btn small" data-act="exportWeek"${w.rows.length ? "" : " disabled"}>Export CSV</button>
   </div>
   ${w.rows.length ? `<div class="tablewrap"><table class="grid"><thead><tr><th>Zákazka</th>${w.dates.map((d, i) => `<th class="h${d === today ? " today" : ""}">${DAYS[i]} ${parseD(d).getDate()}.</th>`).join("")}<th class="h">Spolu</th></tr></thead><tbody>
-    ${w.rows.map(r => `<tr><td><span style="display:flex;align-items:center"><span class="layer" style="--c:${layerColor(r.p)}"></span><span><span class="pnum">${esc(r.p ? r.p.number || "" : "")}</span> ${esc(r.p ? r.p.name : NO_PROJ)}</span></span></td>${r.cells.map(c => `<td class="h${c ? "" : " zero"}">${c ? hrs(c) : "·"}</td>`).join("")}<td class="h sum">${hrs(r.cells.reduce((a, b) => a + b, 0))}</td></tr>`).join("")}
-    <tr class="tot"><td>Spolu</td>${w.colTot.map(c => `<td class="h">${c ? hrs(c) : "·"}</td>`).join("")}<td class="h">${hrs(w.total)}</td></tr>
+    ${w.rows.map(r => `<tr><td><span style="display:flex;align-items:center"><span class="layer" style="--c:${layerColor(r.p)}"></span><span><span class="pnum">${esc(r.p ? r.p.number || "" : "")}</span> ${esc(r.p ? r.p.name : NO_PROJ)}</span></span></td>${r.cells.map(c => `<td class="h${c ? "" : " zero"}">${c ? hmm(c) : "·"}</td>`).join("")}<td class="h sum">${hmm(r.cells.reduce((a, b) => a + b, 0))}</td></tr>`).join("")}
+    <tr class="tot"><td>Spolu</td>${w.colTot.map(c => `<td class="h">${c ? hmm(c) : "·"}</td>`).join("")}<td class="h">${hmm(w.total)}</td></tr>
   </tbody></table></div>
-  <p class="sumline" style="margin-top:12px">Fond týždňa ${hrs((S.settings.weekTarget || 40) * 60)} h, ${w.total >= (S.settings.weekTarget || 40) * 60 ? "splnený" : "chýba " + hrs((S.settings.weekTarget || 40) * 60 - w.total) + " h"}</p>`
+  <p class="sumline" style="margin-top:12px">Fond týždňa ${hmm((S.settings.weekTarget || 40) * 60)} h, ${w.total >= (S.settings.weekTarget || 40) * 60 ? "splnený" : "chýba " + hmm((S.settings.weekTarget || 40) * 60 - w.total) + " h"}</p>`
   : `<div class="empty"><p>V tomto týždni nie sú žiadne záznamy.</p><button class="btn" data-act="newEntry">+ Pridať záznam</button></div>`}`;
 }
 
@@ -603,7 +602,7 @@ function openEntry(entry) {
   fEntry.date.value = entry ? entry.date : todayStr();
   fEntry.start.value = entry ? entry.start || "" : "";
   fEntry.end.value = entry ? entry.end || "" : "";
-  fEntry.duration.value = entry ? hrs(entry.minutes) : "";
+  fEntry.duration.value = entry ? hmm(entry.minutes) : "";
   fEntry.activity.value = entry ? entry.activity || "" : "";
   fEntry.so.value = entry ? entry.so || "" : "";
   fEntry.note.value = entry ? entry.note || "" : "";
@@ -611,7 +610,7 @@ function openEntry(entry) {
 }
 function syncDuration() {
   const a = toMin(fEntry.start.value), b = toMin(fEntry.end.value);
-  if (a != null && b != null) { let d = b - a; if (d < 0) d += 1440; fEntry.duration.value = hrs(d); }
+  if (a != null && b != null) { let d = b - a; if (d < 0) d += 1440; fEntry.duration.value = hmm(d); }
 }
 fEntry.start.addEventListener("change", syncDuration);
 fEntry.end.addEventListener("change", syncDuration);
@@ -624,7 +623,7 @@ fEntry.addEventListener("submit", ev => {
   let minutes = parseDuration(fEntry.duration.value);
   const a = toMin(fEntry.start.value), b = toMin(fEntry.end.value);
   if (a != null && b != null) { minutes = b - a; if (minutes < 0) minutes += 1440; }
-  if (!minutes || minutes <= 0) { fEntry.duration.focus(); toast("Zadajte trvanie (napr. 1,5) alebo čas od–do."); return; }
+  if (!minutes || minutes <= 0) { fEntry.duration.focus(); toast("Zadajte trvanie (napr. 1:30) alebo čas od–do."); return; }
   if (minutes > 24 * 60) { toast("Jeden záznam môže mať najviac 24 hodín."); return; }
   if (!fEntry.date.value) { toast("Zadajte dátum."); return; }
   if (!proj($("#eProject").value)) { $("#eProject").focus(); toast(S.projects.length ? "Vyberte zákazku." : "Najprv založte zákazku."); return; }
@@ -637,11 +636,11 @@ fEntry.addEventListener("submit", ev => {
   };
   saveEntry(entry, prev);
   dEntry.close();
-  toast(prev ? "Záznam upravený." : "Záznam pridaný: " + hrs(minutes) + " h");
+  toast(prev ? "Záznam upravený." : "Záznam pridaný: " + hmm(minutes) + " h");
 });
 $("#eDelete").addEventListener("click", async () => {
   const en = S.editingEntry; if (!en) return;
-  if (!(await ask("Vymazať záznam?", `${hrs(en.minutes)} h, ${longDate(en.date)}, ${projLabel(proj(en.projectId))}`))) return;
+  if (!(await ask("Vymazať záznam?", `${hmm(en.minutes)} h, ${longDate(en.date)}, ${projLabel(proj(en.projectId))}`))) return;
   removeEntry(en); dEntry.close(); toast("Záznam vymazaný.");
 });
 
@@ -689,7 +688,7 @@ $("#pDelete").addEventListener("click", async () => {
   const own = S.entries.filter(e => e.projectId === p.id);
   const n = own.length;
   const running = S.timer && S.timer.projectId === p.id;
-  const msg = (n ? `Spolu so zákazkou sa ${n >= 2 && n < 5 ? "vymažú" : "vymaže"} aj ${n} ${n === 1 ? "záznam" : n < 5 ? "záznamy" : "záznamov"} (${hrs(sumMin(own))} h). ` : "") + (running ? "Bežiaci časovač sa zastaví bez uloženia. " : "") + "Túto akciu nemožno vrátiť.";
+  const msg = (n ? `Spolu so zákazkou sa ${n >= 2 && n < 5 ? "vymažú" : "vymaže"} aj ${n} ${n === 1 ? "záznam" : n < 5 ? "záznamy" : "záznamov"} (${hmm(sumMin(own))} h). ` : "") + (running ? "Bežiaci časovač sa zastaví bez uloženia. " : "") + "Túto akciu nemožno vrátiť.";
   if (!(await ask("Vymazať zákazku " + projLabel(p) + "?", msg))) return;
   [...new Set(own.map(e => monthKey(e.date)))].forEach(k => {
     const items = (Store.docs[k] && Store.docs[k].items ? Store.docs[k].items : []).filter(e => e.projectId !== p.id);
@@ -741,15 +740,15 @@ const csv = rows => "\uFEFF" + rows.map(r => r.map(csvCell).join(";")).join("\r\
 function exportEntries() {
   const list = filteredEntries().slice().sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
   const rows = [["Dátum", "Od", "Do", "Hodiny", "Č. zákazky", "Zákazka", "Investor", "Stupeň PD", "Činnosť", "Objekt", "Popis"]];
-  list.forEach(e => { const p = proj(e.projectId); rows.push([e.date, e.start, e.end, hrs(e.minutes), p ? p.number : "", p ? p.name : NO_PROJ, p ? p.client : "", p ? p.stage : "", e.activity, e.so, e.note]); });
+  list.forEach(e => { const p = proj(e.projectId); rows.push([e.date, e.start, e.end, hmm(e.minutes), p ? p.number : "", p ? p.name : NO_PROJ, p ? p.client : "", p ? p.stage : "", e.activity, e.so, e.note]); });
   const [a, b] = periodRange(S.filter.period);
   offerFile(`stikacka_zaznamy_${S.filter.period === "all" ? "vsetko" : a + "_" + b}.csv`, csv(rows));
 }
 function exportWeek() {
   const w = weekData();
   const rows = [["Č. zákazky", "Zákazka", ...w.dates.map((d, i) => DAYS[i] + " " + d), "Spolu"]];
-  w.rows.forEach(r => rows.push([r.p ? r.p.number : "", r.p ? r.p.name : NO_PROJ, ...r.cells.map(c => c ? hrs(c) : ""), hrs(r.cells.reduce((a, b) => a + b, 0))]));
-  rows.push(["", "Spolu", ...w.colTot.map(c => c ? hrs(c) : ""), hrs(w.total)]);
+  w.rows.forEach(r => rows.push([r.p ? r.p.number : "", r.p ? r.p.name : NO_PROJ, ...r.cells.map(c => c ? hmm(c) : ""), hmm(r.cells.reduce((a, b) => a + b, 0))]));
+  rows.push(["", "Spolu", ...w.colTot.map(c => c ? hmm(c) : ""), hmm(w.total)]);
   offerFile(`stikacka_vykaz_${w.dates[0]}.csv`, csv(rows));
 }
 $("#btnBackup").addEventListener("click", () => {
