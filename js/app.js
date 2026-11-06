@@ -190,7 +190,8 @@ function derive() {
 }
 const proj = id => S.projects.find(p => p.id === id) || null;
 const layerColor = p => p ? LAYERS[((p.color | 0) % LAYERS.length + LAYERS.length) % LAYERS.length].c : "var(--pencil)";
-const projLabel = p => p ? ((p.number ? p.number + " " : "") + p.name) : "Interné (bez zákazky)";
+const NO_PROJ = "Bez zákazky"; // only for old entries saved before every entry needed a project
+const projLabel = p => p ? ((p.number ? p.number + " " : "") + p.name) : NO_PROJ;
 function defaultProjectId() {
   const last = S.entries.find(e => e.projectId && proj(e.projectId));
   if (last) return last.projectId;
@@ -217,6 +218,11 @@ function removeEntry(entry, silent) {
 /* ---------- Timer ---------- */
 let tickT;
 function startTimer(opts) {
+  if (!proj(opts.projectId)) {
+    if (!S.projects.length) { toast("Najprv založte zákazku."); openProject(); }
+    else toast("Vyberte zákazku.");
+    return;
+  }
   const t = { running: true, start: Date.now(), projectId: opts.projectId || "", activity: opts.activity || "", so: opts.so || "", note: opts.note || "" };
   Store.put("timer", t);
   const p = proj(t.projectId), d = new Date(t.start);
@@ -322,9 +328,10 @@ function timerFieldChanged() {
   }, 700);
 }
 
-function projectOptions(sel, includeDone) {
-  const list = sortProjects(S.projects);
-  return `<option value="">Interné (bez zákazky)</option>` + list.map(p => `<option value="${esc(p.id)}"${p.id === sel ? " selected" : ""}>${esc(projLabel(p))}</option>`).join("");
+const projectItems = sel => sortProjects(S.projects).map(p => `<option value="${esc(p.id)}"${p.id === sel ? " selected" : ""}>${esc(projLabel(p))}</option>`).join("");
+function projectOptions(sel) {
+  if (!S.projects.length) return `<option value="">Najprv založte zákazku</option>`;
+  return (proj(sel) ? "" : `<option value="" selected>– vyberte zákazku –</option>`) + projectItems(sel);
 }
 function soOptions(projectId) {
   const p = proj(projectId);
@@ -347,8 +354,9 @@ function renderTimer() {
   setFavicon(running);
   const sel = $("#tProject");
   let curVal = running ? S.timer.projectId : sel.value;
-  if (!running && !S.tPicked) curVal = defaultProjectId();
-  if (document.activeElement !== sel) { sel.innerHTML = projectOptions(curVal, false); sel.value = curVal || ""; }
+  if (!running && (!S.tPicked || !proj(curVal))) curVal = defaultProjectId();
+  if (document.activeElement !== sel) { sel.innerHTML = projectOptions(curVal); sel.value = curVal || ""; }
+  sel.disabled = !running && !S.projects.length;
   if (running) {
     const p = proj(S.timer.projectId);
     box.style.setProperty("--layer", layerColor(p));
@@ -356,8 +364,8 @@ function renderTimer() {
     $("#clockSub").innerHTML = `<span class="dot"></span>Beží od ${hm(new Date(S.timer.start))}`;
     $("#tStart").textContent = "Zastaviť";
   } else {
-    $("#clockSub").textContent = "Časovač stojí";
-    $("#tStart").textContent = "Spustiť";
+    $("#clockSub").textContent = S.projects.length ? "Časovač stojí" : "Najprv založte zákazku";
+    $("#tStart").textContent = S.projects.length ? "Spustiť" : "Založiť zákazku";
   }
   tick();
 }
@@ -391,7 +399,7 @@ function entryRow(e) {
     <div class="when num">${esc(when)}</div>
     <div class="dur num">${hrs(e.minutes)}</div>
     <div class="what">
-      <div class="l1"><span class="layer" style="--c:${layerColor(p)}"></span><span class="pnum">${esc(p ? p.number || "" : "")}</span><span class="pname">${esc(p ? p.name : "Interné")}</span>${e.activity ? `<span class="tag">${esc(e.activity)}</span>` : ""}${e.so ? `<span class="tag">${esc(e.so)}</span>` : ""}</div>
+      <div class="l1"><span class="layer" style="--c:${layerColor(p)}"></span><span class="pnum">${esc(p ? p.number || "" : "")}</span><span class="pname">${esc(p ? p.name : NO_PROJ)}</span>${e.activity ? `<span class="tag">${esc(e.activity)}</span>` : ""}${e.so ? `<span class="tag">${esc(e.so)}</span>` : ""}</div>
       ${e.note ? `<div class="l2">${esc(e.note)}</div>` : ""}
     </div>
     <div class="acts" style="white-space:nowrap"><button class="btn small ghost" data-act="continue" data-id="${esc(e.id)}" title="Pokračovať na tejto práci">▶</button><button class="btn small ghost" data-act="editEntry" data-id="${esc(e.id)}">Upraviť</button></div>
@@ -427,7 +435,7 @@ function viewOverview() {
       <div><div class="tb-l">Dnes</div><div class="tb-v">${hrs1(tMin)} <small>/ ${hrs(dayT)} h</small></div><div class="meter"><i style="width:${Math.min(100, tMin / dayT * 100)}%"></i></div></div>
       <div><div class="tb-l">Tento týždeň</div><div class="tb-v">${hrs1(wMin)} <small>/ ${hrs(weekT)} h</small></div><div class="meter"><i style="width:${Math.min(100, wMin / weekT * 100)}%"></i></div></div>
       <div><div class="tb-l">${MONTHS[new Date().getMonth()][0].toUpperCase() + MONTHS[new Date().getMonth()].slice(1)}</div><div class="tb-v">${hrs1(mMin)} <small>h</small></div></div>
-      <div><div class="tb-l">Týždeň po dňoch</div><div class="weekbars">${weekDates.map((d, i) => `<div class="wb${d === today ? " today" : ""}"><div class="stack">${segs(d).map(s => `<i style="--c:${layerColor(proj(s.id))};height:${s.m / maxD * 100}%" title="${DAYS[i]} – ${esc(projLabel(proj(s.id)))}: ${hrs(s.m)} h"></i>`).join("")}</div><span>${DAYS[i]}</span></div>`).join("")}</div>${weekIds.length ? `<div class="wlegend">${weekIds.map(id => { const p = proj(id); return `<span><span class="layer" style="--c:${layerColor(p)}"></span>${esc(p ? (p.number || p.name) : "Interné")}</span>`; }).join("")}</div>` : ""}</div>
+      <div><div class="tb-l">Týždeň po dňoch</div><div class="weekbars">${weekDates.map((d, i) => `<div class="wb${d === today ? " today" : ""}"><div class="stack">${segs(d).map(s => `<i style="--c:${layerColor(proj(s.id))};height:${s.m / maxD * 100}%" title="${DAYS[i]} – ${esc(projLabel(proj(s.id)))}: ${hrs(s.m)} h"></i>`).join("")}</div><span>${DAYS[i]}</span></div>`).join("")}</div>${weekIds.length ? `<div class="wlegend">${weekIds.map(id => { const p = proj(id); return `<span><span class="layer" style="--c:${layerColor(p)}"></span>${esc(p ? (p.number || p.name) : NO_PROJ)}</span>`; }).join("")}</div>` : ""}</div>
     </div>
   </section>
   <section class="section">
@@ -436,7 +444,7 @@ function viewOverview() {
   </section>
   <section class="section">
     <div class="shead"><h2>Posledné záznamy</h2>${recent.length ? `<button class="btn small ghost" data-act="tab" data-tab="zaznamy">Všetky záznamy</button>` : ""}</div>
-    ${recent.length ? entriesByDay(recent) : `<div class="empty"><p>Žiadne záznamy. Spustite časovač hore, alebo dopíšte hodiny ručne.</p><button class="btn" data-act="newEntry">+ Pridať záznam</button></div>`}
+    ${recent.length ? entriesByDay(recent) : S.projects.length ? `<div class="empty"><p>Žiadne záznamy. Spustite časovač hore, alebo dopíšte hodiny ručne.</p><button class="btn" data-act="newEntry">+ Pridať záznam</button></div>` : `<div class="empty"><p>Hodiny sa zapisujú vždy na zákazku. Najprv si založte zákazku, potom môžete spustiť časovač.</p></div>`}
   </section>`;
 }
 
@@ -450,7 +458,7 @@ function periodRange(period) {
 }
 function filteredEntries() {
   const [a, b] = periodRange(S.filter.period);
-  return S.entries.filter(e => e.date >= a && e.date <= b && (S.filter.project === "all" || (S.filter.project === "" ? !e.projectId : e.projectId === S.filter.project)));
+  return S.entries.filter(e => e.date >= a && e.date <= b && (S.filter.project === "all" || e.projectId === S.filter.project));
 }
 function viewEntries() {
   const list = filteredEntries();
@@ -463,7 +471,7 @@ function viewEntries() {
     </select></label>
     <label class="field" style="min-width:240px"><span>Zákazka</span><select id="fProject">
       <option value="all"${S.filter.project === "all" ? " selected" : ""}>Všetky zákazky</option>
-      ${projectOptions(S.filter.project === "all" ? null : S.filter.project, true)}
+      ${projectItems(S.filter.project)}
     </select></label>
   </div>
   <p class="sumline">Spolu <b class="num">${hrs(total)} h</b> v ${list.length} ${list.length === 1 ? "zázname" : "záznamoch"}</p>
@@ -491,7 +499,7 @@ function viewWeek() {
     <button class="btn small" data-act="exportWeek"${w.rows.length ? "" : " disabled"}>Export CSV</button>
   </div>
   ${w.rows.length ? `<div class="tablewrap"><table class="grid"><thead><tr><th>Zákazka</th>${w.dates.map((d, i) => `<th class="h${d === today ? " today" : ""}">${DAYS[i]} ${parseD(d).getDate()}.</th>`).join("")}<th class="h">Spolu</th></tr></thead><tbody>
-    ${w.rows.map(r => `<tr><td><span style="display:flex;align-items:center"><span class="layer" style="--c:${layerColor(r.p)}"></span><span><span class="pnum">${esc(r.p ? r.p.number || "" : "")}</span> ${esc(r.p ? r.p.name : "Interné")}</span></span></td>${r.cells.map(c => `<td class="h${c ? "" : " zero"}">${c ? hrs(c) : "·"}</td>`).join("")}<td class="h sum">${hrs(r.cells.reduce((a, b) => a + b, 0))}</td></tr>`).join("")}
+    ${w.rows.map(r => `<tr><td><span style="display:flex;align-items:center"><span class="layer" style="--c:${layerColor(r.p)}"></span><span><span class="pnum">${esc(r.p ? r.p.number || "" : "")}</span> ${esc(r.p ? r.p.name : NO_PROJ)}</span></span></td>${r.cells.map(c => `<td class="h${c ? "" : " zero"}">${c ? hrs(c) : "·"}</td>`).join("")}<td class="h sum">${hrs(r.cells.reduce((a, b) => a + b, 0))}</td></tr>`).join("")}
     <tr class="tot"><td>Spolu</td>${w.colTot.map(c => `<td class="h">${c ? hrs(c) : "·"}</td>`).join("")}<td class="h">${hrs(w.total)}</td></tr>
   </tbody></table></div>
   <p class="sumline" style="margin-top:12px">Fond týždňa ${hrs((S.settings.weekTarget || 40) * 60)} h, ${w.total >= (S.settings.weekTarget || 40) * 60 ? "splnený" : "chýba " + hrs((S.settings.weekTarget || 40) * 60 - w.total) + " h"}</p>`
@@ -537,11 +545,12 @@ function ask(title, msg, okLabel = "Vymazať", noLabel = "Zrušiť") {
 /* ---------- Entry dialog ---------- */
 const dEntry = $("#dEntry"), fEntry = $("#fEntry");
 function openEntry(entry) {
+  if (!entry && !S.projects.length) { toast("Najprv založte zákazku."); openProject(); return; }
   S.editingEntry = entry || null;
   $("#dEntryTitle").textContent = entry ? "Upraviť záznam" : "Nový záznam";
   $("#eDelete").hidden = !entry;
   const pid = entry ? entry.projectId : (S.filter.project !== "all" && S.tab === "zaznamy" ? S.filter.project : (S.tPicked || S.timer ? $("#tProject").value : defaultProjectId()));
-  $("#eProject").innerHTML = projectOptions(pid, !!entry);
+  $("#eProject").innerHTML = projectOptions(pid);
   $("#eProject").value = pid || "";
   fEntry.date.value = entry ? entry.date : todayStr();
   fEntry.start.value = entry ? entry.start || "" : "";
@@ -570,6 +579,7 @@ fEntry.addEventListener("submit", ev => {
   if (!minutes || minutes <= 0) { fEntry.duration.focus(); toast("Zadajte trvanie (napr. 1,5) alebo čas od–do."); return; }
   if (minutes > 24 * 60) { toast("Jeden záznam môže mať najviac 24 hodín."); return; }
   if (!fEntry.date.value) { toast("Zadajte dátum."); return; }
+  if (!proj($("#eProject").value)) { $("#eProject").focus(); toast(S.projects.length ? "Vyberte zákazku." : "Najprv založte zákazku."); return; }
   const prev = S.editingEntry;
   const entry = {
     id: prev ? prev.id : uid(), projectId: $("#eProject").value, date: fEntry.date.value,
@@ -628,13 +638,14 @@ $("#pDelete").addEventListener("click", async () => {
   const p = S.editingProject; if (!p) return;
   const own = S.entries.filter(e => e.projectId === p.id);
   const n = own.length;
-  const msg = n ? `Spolu so zákazkou sa ${n >= 2 && n < 5 ? "vymažú" : "vymaže"} aj ${n} ${n === 1 ? "záznam" : n < 5 ? "záznamy" : "záznamov"} (${hrs(sumMin(own))} h). Túto akciu nemožno vrátiť.` : "Túto akciu nemožno vrátiť.";
+  const running = S.timer && S.timer.projectId === p.id;
+  const msg = (n ? `Spolu so zákazkou sa ${n >= 2 && n < 5 ? "vymažú" : "vymaže"} aj ${n} ${n === 1 ? "záznam" : n < 5 ? "záznamy" : "záznamov"} (${hrs(sumMin(own))} h). ` : "") + (running ? "Bežiaci časovač sa zastaví bez uloženia. " : "") + "Túto akciu nemožno vrátiť.";
   if (!(await ask("Vymazať zákazku " + projLabel(p) + "?", msg))) return;
   [...new Set(own.map(e => monthKey(e.date)))].forEach(k => {
     const items = (Store.docs[k] && Store.docs[k].items ? Store.docs[k].items : []).filter(e => e.projectId !== p.id);
     Store.put(k, items.length ? { items } : DEL);
   });
-  if (S.timer && S.timer.projectId === p.id) Store.put("timer", Object.assign({}, S.timer, { projectId: "" }));
+  if (running) Store.put("timer", { running: false });
   saveProjects(S.projects.filter(x => x.id !== p.id));
   dProject.close(); toast("Zákazka vymazaná.");
 });
@@ -678,14 +689,14 @@ const csv = rows => "\uFEFF" + rows.map(r => r.map(csvCell).join(";")).join("\r\
 function exportEntries() {
   const list = filteredEntries().slice().sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
   const rows = [["Dátum", "Od", "Do", "Hodiny", "Č. zákazky", "Zákazka", "Investor", "Stupeň PD", "Činnosť", "Objekt", "Popis"]];
-  list.forEach(e => { const p = proj(e.projectId); rows.push([e.date, e.start, e.end, hrs(e.minutes), p ? p.number : "", p ? p.name : "Interné", p ? p.client : "", p ? p.stage : "", e.activity, e.so, e.note]); });
+  list.forEach(e => { const p = proj(e.projectId); rows.push([e.date, e.start, e.end, hrs(e.minutes), p ? p.number : "", p ? p.name : NO_PROJ, p ? p.client : "", p ? p.stage : "", e.activity, e.so, e.note]); });
   const [a, b] = periodRange(S.filter.period);
   offerFile(`stikacka_zaznamy_${S.filter.period === "all" ? "vsetko" : a + "_" + b}.csv`, csv(rows));
 }
 function exportWeek() {
   const w = weekData();
   const rows = [["Č. zákazky", "Zákazka", ...w.dates.map((d, i) => DAYS[i] + " " + d), "Spolu"]];
-  w.rows.forEach(r => rows.push([r.p ? r.p.number : "", r.p ? r.p.name : "Interné", ...r.cells.map(c => c ? hrs(c) : ""), hrs(r.cells.reduce((a, b) => a + b, 0))]));
+  w.rows.forEach(r => rows.push([r.p ? r.p.number : "", r.p ? r.p.name : NO_PROJ, ...r.cells.map(c => c ? hrs(c) : ""), hrs(r.cells.reduce((a, b) => a + b, 0))]));
   rows.push(["", "Spolu", ...w.colTot.map(c => c ? hrs(c) : ""), hrs(w.total)]);
   offerFile(`stikacka_vykaz_${w.dates[0]}.csv`, csv(rows));
 }
@@ -849,6 +860,7 @@ function pickSelect(i) {
 if (!coarsePointer) {
   document.addEventListener("mousedown", e => {
     const sel = e.target.closest && e.target.closest(".field select");
+    if (sel && sel.disabled) return;
     if (sel) {
       e.preventDefault(); sel.focus();
       if (selOpen && selOpen.sel === sel) closeSelect(); else openSelect(sel);
@@ -858,7 +870,7 @@ if (!coarsePointer) {
   }, true);
   document.addEventListener("keydown", e => {
     const sel = e.target.closest && e.target.closest(".field select");
-    if (!sel) return;
+    if (!sel || sel.disabled) return;
     if (selOpen && selOpen.sel === sel) {
       const n = sel.options.length;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); selOpen.active = (selOpen.active + (e.key === "ArrowDown" ? 1 : -1) + n) % n; paintSelect(); }
