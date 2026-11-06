@@ -192,10 +192,17 @@ const proj = id => S.projects.find(p => p.id === id) || null;
 const layerColor = p => p ? LAYERS[((p.color | 0) % LAYERS.length + LAYERS.length) % LAYERS.length].c : "var(--pencil)";
 const NO_PROJ = "Bez zákazky"; // only for old entries saved before every entry needed a project
 const projLabel = p => p ? ((p.number ? p.number + " " : "") + p.name) : NO_PROJ;
+// Most recently used first (running timer, then newest entry); never-used ones after, newest created first.
+function byUse(list) {
+  const rank = new Map();
+  S.entries.forEach((e, i) => { if (e.projectId && !rank.has(e.projectId)) rank.set(e.projectId, i); });
+  if (S.timer && S.timer.projectId) rank.set(S.timer.projectId, -1);
+  const r = p => rank.has(p.id) ? rank.get(p.id) : Infinity;
+  return sortProjects(list).sort((a, b) => r(a) !== r(b) ? (r(a) < r(b) ? -1 : 1) : (b.created || 0) - (a.created || 0));
+}
 function defaultProjectId() {
-  const last = S.entries.find(e => e.projectId && proj(e.projectId));
-  if (last) return last.projectId;
-  return S.projects.length ? sortProjects(S.projects)[0].id : "";
+  const list = byUse(S.projects);
+  return list.length ? list[0].id : "";
 }
 const activities = () => [...new Set([...DEFAULT_ACTS, ...(S.settings.customActs || []), ...S.entries.map(e => e.activity).filter(Boolean)])];
 
@@ -328,7 +335,19 @@ function timerFieldChanged() {
   }, 700);
 }
 
-const projectItems = sel => sortProjects(S.projects).map(p => `<option value="${esc(p.id)}"${p.id === sel ? " selected" : ""}>${esc(projLabel(p))}</option>`).join("");
+const projectItems = sel => byUse(S.projects).map(p => `<option value="${esc(p.id)}"${p.id === sel ? " selected" : ""}>${esc(projLabel(p))}</option>`).join("");
+// Rewrite the start of the running timer. The time is taken as today, or yesterday if it is still ahead.
+function setTimerStart(value) {
+  const at = $("#tStartAt");
+  if (!S.timer) return;
+  const m = toMin(value), old = new Date(S.timer.start);
+  if (m == null || value === hm(old)) { if (at) at.value = hm(old); return; }
+  const now = new Date();
+  let d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(m / 60), m % 60);
+  if (d > now) d = addDays(d, -1);
+  Store.put("timer", Object.assign({}, S.timer, { start: d.getTime() }));
+  toast("Časovač beží od " + hm(d) + (ds(d) !== ds(now) ? " (včera)" : "") + ".");
+}
 function projectOptions(sel) {
   if (!S.projects.length) return `<option value="">Najprv založte zákazku</option>`;
   return (proj(sel) ? "" : `<option value="" selected>– vyberte zákazku –</option>`) + projectItems(sel);
@@ -361,7 +380,12 @@ function renderTimer() {
     const p = proj(S.timer.projectId);
     box.style.setProperty("--layer", layerColor(p));
     [["#tActivity", "activity"], ["#tSO", "so"], ["#tNote", "note"]].forEach(([s, k]) => { const el = $(s); if (document.activeElement !== el) el.value = S.timer[k] || ""; });
-    $("#clockSub").innerHTML = `<span class="dot"></span>Beží od ${hm(new Date(S.timer.start))}`;
+    let at = $("#tStartAt");
+    if (!at) {
+      $("#clockSub").innerHTML = `<span class="dot"></span>Beží od <input type="time" step="60" id="tStartAt" class="startat" aria-label="Čas spustenia" title="Prepíšte čas spustenia">`;
+      at = $("#tStartAt");
+    }
+    if (document.activeElement !== at) at.value = hm(new Date(S.timer.start));
     $("#tStart").textContent = "Zastaviť";
   } else {
     $("#clockSub").textContent = S.projects.length ? "Časovač stojí" : "Najprv založte zákazku";
@@ -753,6 +777,13 @@ $("#tStart").addEventListener("click", () => {
 $("#tProject").addEventListener("change", e => { S.tPicked = true; timerFieldChanged(); });
 ["#tActivity", "#tSO", "#tNote"].forEach(s => $(s).addEventListener("input", timerFieldChanged));
 $("#tNote").addEventListener("keydown", e => { if (e.key === "Enter" && !S.timer) $("#tStart").click(); });
+// Start-time field lives inside #clockSub and is re-created, so listen on the container.
+$("#clockSub").addEventListener("keydown", e => {
+  if (e.target.id !== "tStartAt") return;
+  if (e.key === "Enter") { e.preventDefault(); setTimerStart(e.target.value); e.target.blur(); }
+  else if (e.key === "Escape" && S.timer) { e.preventDefault(); e.target.value = hm(new Date(S.timer.start)); e.target.blur(); }
+});
+$("#clockSub").addEventListener("focusout", e => { if (e.target.id === "tStartAt") setTimerStart(e.target.value); });
 $("#btnAdd").addEventListener("click", () => openEntry());
 document.addEventListener("keydown", e => {
   if (e.target.matches("input, textarea, select") || document.querySelector("dialog[open]")) return;

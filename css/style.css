@@ -114,6 +114,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .running .clock-sub .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--run); margin-right: 5px; vertical-align: 1px; animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .running .clock-sub .dot { animation: none; } }
+.startat { font: inherit; font-variant-numeric: tabular-nums; color: var(--ink); background: transparent; border: 0; border-bottom: 1px dashed var(--pencil); border-radius: 0; padding: 0 1px; margin: 0; cursor: text; }
+.startat:hover { border-bottom-color: var(--ink); }
+.startat:focus { outline: none; border-bottom: 1px solid var(--ink); }
+.startat::-webkit-calendar-picker-indicator { display: none; }
 
 .tfields { display: grid; grid-template-columns: minmax(180px, 1.3fr) minmax(150px, 1fr) minmax(90px, .55fr) minmax(160px, 1.4fr); gap: 10px; }
 .field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
