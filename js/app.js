@@ -205,7 +205,11 @@ function defaultProjectId() {
 }
 // Built-in stages, then the user's own from settings; "Iné" stays last.
 const stages = () => [...new Set([...STAGES.filter(s => s !== "Iné"), ...(S.settings.customStages || []), "Iné"])];
-const activities = () => [...new Set([...DEFAULT_ACTS, ...(S.settings.customActs || []), ...S.entries.map(e => e.activity).filter(Boolean)])];
+// A PD stage typed in as an activity (custom list or old entries) is not offered as an activity.
+// Default activities stay even if a stage has the same name (e.g. "Autorský dozor").
+const isStage = v => { const l = String(v).toLowerCase(); return !DEFAULT_ACTS.some(a => a.toLowerCase() === l) && stages().some(s => s.toLowerCase() === l); };
+const customActs = () => (S.settings.customActs || []).filter(a => !isStage(a));
+const activities = () => [...new Set([...DEFAULT_ACTS, ...customActs(), ...S.entries.map(e => e.activity).filter(a => a && !isStage(a))])];
 
 /* ---------- Mutations ---------- */
 function saveProjects(list) { Store.put("projects", { items: list }); }
@@ -708,22 +712,30 @@ $("#btnSettings").addEventListener("click", () => {
   pickedRound = Number(S.settings.rounding) || 1; paintRound();
   fSettings.dayTarget.value = String(S.settings.dayTarget).replace(".", ",");
   fSettings.weekTarget.value = String(S.settings.weekTarget).replace(".", ",");
-  fSettings.customActs.value = (S.settings.customActs || []).join(", ");
+  fSettings.customActs.value = customActs().join(", ");
   fSettings.customStages.value = (S.settings.customStages || []).join(", ");
   fSettings.punchAnim.checked = S.settings.punchAnim !== false;
   dSettings.showModal();
 });
 fSettings.addEventListener("submit", ev => {
   ev.preventDefault();
+  const list = v => v.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  const customStages = list(fSettings.customStages.value);
+  const stageSet = new Set([...STAGES, ...customStages].map(s => s.toLowerCase()));
+  const defActs = new Set(DEFAULT_ACTS.map(a => a.toLowerCase()));
+  const acts = list(fSettings.customActs.value);
+  const keptActs = acts.filter(a => defActs.has(a.toLowerCase()) || !stageSet.has(a.toLowerCase()));
   Store.put("settings", {
     rounding: pickedRound,
     dayTarget: parseNum(fSettings.dayTarget.value) || 8,
     weekTarget: parseNum(fSettings.weekTarget.value) || 40,
-    customActs: fSettings.customActs.value.split(/[,;]/).map(s => s.trim()).filter(Boolean),
-    customStages: fSettings.customStages.value.split(/[,;]/).map(s => s.trim()).filter(Boolean),
+    customActs: keptActs,
+    customStages,
     punchAnim: fSettings.punchAnim.checked
   });
-  dSettings.close(); toast("Nastavenia uložené.");
+  dSettings.close();
+  const dropped = acts.filter(a => !keptActs.includes(a));
+  toast(dropped.length ? `Nastavenia uložené. ${dropped.join(", ")} ${dropped.length === 1 ? "je stupeň" : "sú stupne"} PD, medzi činnosti sa nepridajú.` : "Nastavenia uložené.");
 });
 
 /* ---------- Files: CSV + backup ---------- */
