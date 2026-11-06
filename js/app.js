@@ -3,7 +3,7 @@
 
 /* ---------- Constants ---------- */
 const LS_KEY = "vykaz-hodin-v1";
-const STAGES = ["Štúdia", "DÚR", "DSP", "DÚSP", "DRS", "DSRS", "DVZ", "RDS", "Autorský dozor", "Posudok", "Iné"];
+const STAGES = ["Štúdia", "DÚR", "DSP", "DÚSP", "DRS", "DSRS", "DVZ", "RDS", "PSO", "SZP", "SZZ", "PSP", "PSZ", "VPP", "DSZ", "ZDS", "Autorský dozor", "Posudok", "Iné"];
 const DEFAULT_ACTS = ["Výkresová dokumentácia", "Výpočty a posudky", "BIM / 3D model", "Technická správa", "Výkaz výmer a rozpočet", "Koordinácia profesií", "Porada / rokovanie", "Obhliadka stavby", "Inžiniering a vyjadrenia", "Autorský dozor", "Kontrola a revízia", "Administratíva"];
 const LAYERS = [
   { aci: 1, c: "#D7302A" }, { aci: 30, c: "#E8790F" }, { aci: 2, c: "#D9AE00" }, { aci: 3, c: "#2E9E44" },
@@ -204,6 +204,8 @@ function defaultProjectId() {
   const list = byUse(S.projects);
   return list.length ? list[0].id : "";
 }
+// Built-in stages, then the user's own from settings; "Iné" stays last.
+const stages = () => [...new Set([...STAGES.filter(s => s !== "Iné"), ...(S.settings.customStages || []), "Iné"])];
 const activities = () => [...new Set([...DEFAULT_ACTS, ...(S.settings.customActs || []), ...S.entries.map(e => e.activity).filter(Boolean)])];
 
 /* ---------- Mutations ---------- */
@@ -435,32 +437,54 @@ function entriesByDay(list) {
   return Object.keys(groups).sort().reverse().map(d => `<div class="day"><div class="dayhead"><h3>${longDate(d)}${d === todayStr() ? " · dnes" : ""}</h3><span class="num">${hrs(sumMin(groups[d]))} h</span></div>${groups[d].map(entryRow).join("")}</div>`).join("");
 }
 
-function viewOverview() {
+// Time of the running timer so far, split per calendar day (it may run over midnight).
+function liveEntries() {
+  if (!S.timer) return [];
+  const out = [], now = new Date();
+  let s = new Date(S.timer.start);
+  while (s < now) {
+    const next = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 1), e = next < now ? next : now;
+    const m = Math.floor((e - s) / 60000);
+    if (m > 0) out.push({ date: ds(s), minutes: m, projectId: S.timer.projectId });
+    s = next;
+  }
+  return out;
+}
+function totalsBlock() {
+  const all = S.entries.concat(liveEntries());
   const today = todayStr();
   const ws = weekStart(new Date());
   const weekDates = [...Array(7)].map((_, i) => ds(addDays(ws, i)));
-  const tMin = sumMin(S.entries.filter(e => e.date === today));
-  const wMin = sumMin(S.entries.filter(e => weekDates.includes(e.date)));
+  const tMin = sumMin(all.filter(e => e.date === today));
+  const wMin = sumMin(all.filter(e => weekDates.includes(e.date)));
   const mPrefix = today.slice(0, 7);
-  const mMin = sumMin(S.entries.filter(e => e.date.startsWith(mPrefix)));
+  const mMin = sumMin(all.filter(e => e.date.startsWith(mPrefix)));
   const dayT = (S.settings.dayTarget || 8) * 60, weekT = (S.settings.weekTarget || 40) * 60;
-  const weekEntries = S.entries.filter(e => weekDates.includes(e.date));
+  const weekEntries = all.filter(e => weekDates.includes(e.date));
   const perDay = weekDates.map(d => sumMin(weekEntries.filter(e => e.date === d)));
   const maxD = Math.max(dayT, ...perDay);
   const weekIds = [...new Set(weekEntries.map(e => e.projectId || ""))].sort((a, b) => projLabel(proj(a)).localeCompare(projLabel(proj(b)), "sk"));
   const segs = d => weekIds.map(id => ({ id, m: sumMin(weekEntries.filter(e => e.date === d && (e.projectId || "") === id)) })).filter(x => x.m);
+  return `<div class="tblock">
+      <div><div class="tb-l">Dnes</div><div class="tb-v">${hrs1(tMin)} <small>/ ${hrs(dayT)} h</small></div><div class="meter"><i style="width:${Math.min(100, tMin / dayT * 100)}%"></i></div></div>
+      <div><div class="tb-l">Tento týždeň</div><div class="tb-v">${hrs1(wMin)} <small>/ ${hrs(weekT)} h</small></div><div class="meter"><i style="width:${Math.min(100, wMin / weekT * 100)}%"></i></div></div>
+      <div><div class="tb-l">${MONTHS[new Date().getMonth()][0].toUpperCase() + MONTHS[new Date().getMonth()].slice(1)}</div><div class="tb-v">${hrs1(mMin)} <small>h</small></div></div>
+      <div><div class="tb-l">Týždeň po dňoch</div><div class="weekbars">${weekDates.map((d, i) => `<div class="wb${d === today ? " today" : ""}"><div class="stack">${segs(d).map(s => `<i style="--c:${layerColor(proj(s.id))};height:${s.m / maxD * 100}%" title="${DAYS[i]} – ${esc(projLabel(proj(s.id)))}: ${hrs(s.m)} h"></i>`).join("")}</div><span>${DAYS[i]}</span></div>`).join("")}</div>${weekIds.length ? `<div class="wlegend">${weekIds.map(id => { const p = proj(id); return `<span><span class="layer" style="--c:${layerColor(p)}"></span>${esc(p ? (p.number || p.name) : NO_PROJ)}</span>`; }).join("")}</div>` : ""}</div>
+    </div>`;
+}
+// Refresh only the totals while the timer runs, so the rest of the page is left alone.
+function refreshTotals() {
+  const tb = document.querySelector("#main .tblock");
+  if (tb && S.timer) tb.outerHTML = totalsBlock();
+}
+function viewOverview() {
   const recentProjects = S.projects.filter(p => lastWorked(p)).sort((a, b) => lastWorked(b).localeCompare(lastWorked(a))).slice(0, 6);
   const shown = recentProjects.length ? recentProjects : sortProjects(S.projects).slice(0, 6);
   const recent = S.entries.slice(0, 6);
 
   return `
   <section class="section">
-    <div class="tblock">
-      <div><div class="tb-l">Dnes</div><div class="tb-v">${hrs1(tMin)} <small>/ ${hrs(dayT)} h</small></div><div class="meter"><i style="width:${Math.min(100, tMin / dayT * 100)}%"></i></div></div>
-      <div><div class="tb-l">Tento týždeň</div><div class="tb-v">${hrs1(wMin)} <small>/ ${hrs(weekT)} h</small></div><div class="meter"><i style="width:${Math.min(100, wMin / weekT * 100)}%"></i></div></div>
-      <div><div class="tb-l">${MONTHS[new Date().getMonth()][0].toUpperCase() + MONTHS[new Date().getMonth()].slice(1)}</div><div class="tb-v">${hrs1(mMin)} <small>h</small></div></div>
-      <div><div class="tb-l">Týždeň po dňoch</div><div class="weekbars">${weekDates.map((d, i) => `<div class="wb${d === today ? " today" : ""}"><div class="stack">${segs(d).map(s => `<i style="--c:${layerColor(proj(s.id))};height:${s.m / maxD * 100}%" title="${DAYS[i]} – ${esc(projLabel(proj(s.id)))}: ${hrs(s.m)} h"></i>`).join("")}</div><span>${DAYS[i]}</span></div>`).join("")}</div>${weekIds.length ? `<div class="wlegend">${weekIds.map(id => { const p = proj(id); return `<span><span class="layer" style="--c:${layerColor(p)}"></span>${esc(p ? (p.number || p.name) : NO_PROJ)}</span>`; }).join("")}</div>` : ""}</div>
-    </div>
+    ${totalsBlock()}
   </section>
   <section class="section">
     <div class="shead"><h2>Naposledy rozpracované</h2>${S.projects.length > shown.length ? `<button class="btn small ghost" data-act="tab" data-tab="zakazky">Všetky zákazky</button>` : ""}<button class="btn small primary" data-act="newProject">+ Nová zákazka</button></div>
@@ -623,7 +647,6 @@ $("#eDelete").addEventListener("click", async () => {
 
 /* ---------- Project dialog ---------- */
 const dProject = $("#dProject"), fProject = $("#fProject");
-fProject.stage.innerHTML = `<option value="">–</option>` + STAGES.map(s => `<option>${esc(s)}</option>`).join("");
 function renderSwatches() {
   $("#swatches").innerHTML = LAYERS.map((l, i) => `<button type="button" class="swatch" role="radio" aria-checked="${i === S.pickedColor}" aria-label="Farba ${l.aci}" data-i="${i}" style="--c:${l.c}"><span>${l.aci}</span></button>`).join("");
 }
@@ -635,6 +658,9 @@ function openProject(p) {
   fProject.number.value = p ? p.number || "" : "";
   fProject.name.value = p ? p.name : "";
   fProject.client.value = p ? p.client || "" : "";
+  const st = stages();
+  if (p && p.stage && !st.includes(p.stage)) st.push(p.stage); // keep a stage removed from settings
+  fProject.stage.innerHTML = `<option value="">–</option>` + st.map(s => `<option>${esc(s)}</option>`).join("");
   fProject.stage.value = p ? p.stage || "" : "";
   fProject.objects.value = p && p.objects ? p.objects.join(", ") : "";
   fProject.pnote.value = p ? p.note || "" : "";
@@ -684,6 +710,7 @@ $("#btnSettings").addEventListener("click", () => {
   fSettings.dayTarget.value = String(S.settings.dayTarget).replace(".", ",");
   fSettings.weekTarget.value = String(S.settings.weekTarget).replace(".", ",");
   fSettings.customActs.value = (S.settings.customActs || []).join(", ");
+  fSettings.customStages.value = (S.settings.customStages || []).join(", ");
   fSettings.punchAnim.checked = S.settings.punchAnim !== false;
   dSettings.showModal();
 });
@@ -694,6 +721,7 @@ fSettings.addEventListener("submit", ev => {
     dayTarget: parseNum(fSettings.dayTarget.value) || 8,
     weekTarget: parseNum(fSettings.weekTarget.value) || 40,
     customActs: fSettings.customActs.value.split(/[,;]/).map(s => s.trim()).filter(Boolean),
+    customStages: fSettings.customStages.value.split(/[,;]/).map(s => s.trim()).filter(Boolean),
     punchAnim: fSettings.punchAnim.checked
   });
   dSettings.close(); toast("Nastavenia uložené.");
@@ -929,5 +957,6 @@ $("#btnPersist").addEventListener("click", async () => {
 });
 
 tickT = setInterval(tick, 1000);
+setInterval(refreshTotals, 60000); // hours in Prehľad follow the running timer
 initStore();
 })();
